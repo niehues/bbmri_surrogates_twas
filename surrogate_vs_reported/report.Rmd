@@ -1,0 +1,495 @@
+---
+title: "Comparisons of TWAS models"
+author: 
+  - Anna Niehues^[Radboud University Medical Center, Anna.Niehues@radboudumc.nl]
+output: bookdown::html_document2
+bibliography: bibliography.bib
+---
+
+## Data and model parameters
+
+### Data
+
+```{r cohort_information, echo = FALSE}
+#source("input.R")
+library(drake)
+cohorts <- unique(unlist(lapply(models_json, function(x) {x$cohorts})))
+names(cohorts) <- cohorts
+num_cohorts <- length(cohorts)
+cohorts_info <- paste0(cohorts, collapse = ", ")
+if (num_cohorts > 1) {s <- "s"} else {s <- ""}
+```
+
+RNA-seq data (read counts, "Freeze2_unrelated" data sets) from `r num_cohorts` Dutch biobank cohort`r s` (`r cohorts_info`) generated within the BBMRI-NL BIOS consortium were analyzed using the BBMRIomics R package [@Iterson2020].
+
+### Predictors
+
+#### Epigenetic predictor
+
+Input files for predicted smoking status using EpiSmokEr [@Bollepalli2019]: 
+
+`r paste0(epismoker_results_paths, collapse = ', ')`
+
+```{r}
+# EpiSmokEr results columns
+loadd(epismoker_variables)
+epismoker_variables
+```
+
+#### Metabolic predictors
+
+
+
+Input files for metabolic scores [@Bizzarri2021preprint]: 
+
+`r paste0(metabolomics_surrogates_paths, collapse = ', ')`
+
+```{r}
+# metabolic predictor scores columns
+loadd(surrogates_variables)
+surrogates_variables
+```
+
+
+
+### Comparisons and models
+
+Multiple comparisons are performed. For each comparison, two alternative models are defined and used in linear modeling in transcriptome-wide associations studies. For the comparisons "triglycerides", "totalcholesterol", "ldlchol", "age", "hdlchol", "hscrp" and "bmi" scores of metabolic predictors as primary outcome are compared to reported or measured values. In the case of the comparison for "smoking", the metabolic predictor is compared to an epigenetic predictor. Additional covariates are included to adjust for biological (sex, age) and technical confounders (white blood cell counts, flow cell number). All primary outcomes are standardized (z-score normalization). 
+
+Model parameters for `r length(models_json)` comparisons:
+
+```{r}
+models_json
+```
+
+## TWAS results
+
+```{r}
+get_covariatetype <- function(outcome_variable) {
+  if (outcome_variable %in% epismoker_variables) {
+    covariate_type <- "Epigenetic surrogate"
+  } else if (outcome_variable %in% surrogates_variables) {
+    covariate_type <- "Metabolic surrogate"
+  } else {
+    covariate_type <- "Reported variable"
+  }
+  return(covariate_type)
+}
+```
+
+### Bias, inflation, and effect size
+
+```{r bias_data, echo = FALSE}
+bias_inflation_l <- lapply(seq_len(num_models), function(i) {
+  x <- models_list[[i]]
+  trgt <- paste0(c("bias_inflation", x[["comparison"]], x[["model"]], x[["cohort"]]), collapse = "_")
+  trgt <- gsub("[, ()]", ".", trgt)
+  row <- readd(trgt, character_only = TRUE)
+  # if (endsWith(row$model, "_z")) {
+  #   model_base_name <- substr(row$model, 1, nchar(row$model)-2)
+  #   row$scaling <- "z"
+  # } else {
+  #   model_base_name <- row$model
+  #   row$scaling <- "none"
+  # }
+  row$covariate_type <- get_covariatetype(row$model)
+  row$num_significant.bacon[row$num_significant.bacon == 0] <- 0.1 # otherwise coord_trans(y = "log10") produces empty plot
+  row$log10.num_significant.bacon <- log10(row$num_significant.bacon)
+  return(row)
+})
+# merge wide format data frame
+bias_inflation_df <- data.table::rbindlist(bias_inflation_l)
+# convert to long format
+bias_inflation_long <- reshape2::melt(
+  bias_inflation_df,
+  id.vars = c("comparison", "cohort", "model", "covariate_type"), #, "scaling"),
+  variable.name = "parameter",
+  value.name = "value")
+bias_inflation_long$`Variable type` <- factor(bias_inflation_long$covariate_type,
+                                              levels = c("Reported variable",
+                                                         "Metabolic surrogate",
+                                                         "Epigenetic surrogate"),
+                                              labels = c("Reported \nvariable",
+                                                         "Metabolic\nsurrogate",
+                                                         "Epigenetic\nsurrogate"))
+bias_inflation_long$`Cohort` <- bias_inflation_long$cohort
+bias_inflation_long_comparison_lables <- unique(bias_inflation_long$comparison)
+bias_inflation_long_comparison_lables[bias_inflation_long_comparison_lables == "Blood pressure lowering medication"] <- "Blood pressure\nlowering medication"
+bias_inflation_long$Outcome <- factor(
+  bias_inflation_long$comparison,
+  levels = unique(bias_inflation_long$comparison),
+  labels = bias_inflation_long_comparison_lables)
+write.csv(bias_inflation_long,
+     file = file.path(readd(outdir), "fig2_data.csv"))
+# exlcude epigenetic surrogate from figure
+bias_inflation_long <- bias_inflation_long[bias_inflation_long$`Variable type` != "Epigenetic\nsurrogate",]
+print(str(bias_inflation_long))
+print(unique(bias_inflation_long$parameter))
+```
+
+Figure \@ref(fig:biasinflation) shows bias and inflation of test statistics estimated based on the empirical null distribution using the R package `bacon` [@Iterson2017]. In several comparisons ("totalcholesterol", "ldlchol", "age"), lower values for both bias and inflation are observed in models with metabolic scores as primary outcome variable compared to those with measured or reported values as outcome. At the same time, the numbers of found signigicant associations (Figure \@ref(fig:numsignif)) is decreased, too. The corresponding effect sizes for the significantly associated genes (Figure \@ref(fig:effsize)) are decreased for "ldlchol" and "age", but increased for cholesterol.
+
+
+```{r biasinflation, fig.cap = "Comparison of TWAS result characteristics. Number of found significant associations, mean absolute effect sizes across all genes, and bias and inflation of test statistics (adjusted p-values) for alternative models per comparisons and cohort. Comparisons are ordered by performance of metabolic predictors for binary outcome measures. Type of outcome variable are indicated by color: reported or measured variable = black, metabolic surrogate = orange, epigenetic surrogate = blue. Mean values across four cohorts (two cohorts for hsCRP) are plotted as horizontal bars. Note the log10 scale on the y-axis of the upper plot."}
+require(ggplot2)
+require(ggbeeswarm)
+require(gridExtra)
+require(grid)
+require(ggpubr)
+
+# http://jfly.iam.u-tokyo.ac.jp/color/
+cbf_palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+ggp_biasinflation_dummy <- ggplot(
+  bias_inflation_long,
+  aes(x = Outcome,
+      y = value, 
+      color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, shape = `Cohort`), 
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  theme_light(base_size = 7) 
+
+ggp_biasinflation1 <- ggplot(
+  bias_inflation_long[
+    (bias_inflation_long$parameter %in% c("num_significant.bacon")),],
+  aes(x = Outcome,
+      y = value, 
+      color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, shape = Cohort), 
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  scale_y_continuous(breaks = c(1, 10, 100, 1000)) +
+  coord_trans(y = "log10") + #scale_y_continuous(trans = "log10") +
+  ylab("Number of\nsignificant\nassociations") +
+  theme_light(base_size = 6) +
+  labs(tag = "A  ") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x= element_blank(),
+        legend.position = "none",
+        plot.margin= unit(c(0.5, 0.5, 0, 0.5), "lines"))
+
+ggp_biasinflation2 <- ggplot(
+  bias_inflation_long[
+    (bias_inflation_long$parameter %in% c("mean_abseffsize.bacon")),],
+  aes(x = Outcome,
+      y = value, 
+      color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, shape = Cohort), 
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  ylab("Mean\nabsolute\neffect size") +
+  theme_light(base_size = 6) +
+  labs(tag = "B  ") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.position = "none",
+        plot.margin= unit(c(0.2, 0.5, 0.1, 0.5), "lines") # top, right, bottom, and left margins
+        )
+
+ggp_biasinflation3 <- ggplot(
+  bias_inflation_long[
+    (bias_inflation_long$parameter %in% c("bias")),],
+  aes(x = Outcome,
+      y = value, 
+      color = `Variable type`)) +
+  geom_hline(yintercept = 0, color = "#999999") +
+  geom_beeswarm(aes(color = `Variable type`, shape = `Cohort`), 
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  ylab("Bias") +
+  theme_light(base_size = 6) +
+  labs(tag = "C  ") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.position = "none",
+        plot.margin= unit(c(0.1, 0.5, 0.2, 0.5), "lines")
+        )
+
+ggp_biasinflation4 <- ggplot(
+  bias_inflation_long[
+    (bias_inflation_long$parameter %in% c("inflation")),],
+  aes(x = Outcome,
+      y = value, 
+      color = `Variable type`)) +
+  geom_hline(yintercept = 1, color = "#999999") +
+  geom_beeswarm(aes(color = `Variable type`, shape = `Cohort`), 
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  ylab("Inflation") +
+  xlab("Outcome") +
+  theme_light(base_size = 6) +
+  labs(tag = "D  ") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        plot.margin= unit(c(0, 0.5, 0.5, 0.5), "lines"),
+        legend.position = "none")
+
+ggp_biasinflation_legend <- as_ggplot(get_legend(ggp_biasinflation_dummy)) +
+  theme(plot.margin = unit(c(2, 0.5, 2, 0.5), "lines"))
+
+plot_list <- list(ggp_biasinflation1, ggp_biasinflation2, ggp_biasinflation3, ggp_biasinflation4)
+grob_list <- lapply(plot_list, ggplotGrob)
+ggp_biasinflation <- grid.arrange(
+  arrangeGrob(do.call(rbind, grob_list)),
+  ggp_biasinflation_legend, nrow = 1, widths = c(9, 2))
+ggsave(file.path(readd(outdir), "fig2.pdf"), ggp_biasinflation, 
+       width = 12, height = 7, units = "cm", dpi = 600)
+#ggsave(file.path(readd(outdir), "Fig1_associations_per_cohort.tiff"), ggp_biasinflation, 
+#       width = 12, height = 7, units = "cm", dpi = 600, compression = "lzw")
+ggp_biasinflation
+```
+
+### Comparison of beta values
+
+
+```{r betacor_data, echo = FALSE}
+rows <- list()
+row_idx <- 0
+for (comparison in models_json) {
+  #if (endsWith(names(comparison$models)[[1]], "_z")) {
+    for (cohort in comparison$cohorts) {
+      trgt1 <- paste0("betas_by_comparison_by_cohort_", comparison$comparison, "_", cohort)
+      trgt1 <- gsub("[, ()]", ".", trgt1)
+      betas_ <- readd(trgt1, character_only = TRUE)
+      trgt2 <- paste0("betas_bacon_by_comparison_by_cohort_", comparison$comparison, "_", cohort)
+      trgt2 <- gsub("[, ()]", ".", trgt2)
+      esbacon_ <- readd(trgt2, character_only = TRUE)
+      trgt3 <- paste0("model_parameters_by_comparison_by_cohort_", comparison$comparison, "_", cohort)
+      trgt3 <- gsub("[, ()]", ".", trgt3)
+      model_parameters_ <- readd(trgt3, character_only = TRUE)
+      if (length(model_parameters_) > 1) {
+        combos <- gtools::combinations(
+          length(model_parameters_), 2, seq_len(length(model_parameters_)))
+        coef_num <- 2
+        for (i in seq(1, dim(combos)[1])) {
+          if ((get_covariatetype(model_parameters_[[combos[i, 1]]]$model) != "Epigenetic surrogate") &
+              (get_covariatetype(model_parameters_[[combos[i, 2]]]$model) != "Epigenetic surrogate")) {
+            pearsonr <- cor(betas_[[combos[i, 1]]][, coef_num],
+                           betas_[[combos[i, 2]]][, coef_num], method = "pearson")
+            pearsonr.bacon <- cor(esbacon_[[combos[i, 1]]],
+                                  esbacon_[[combos[i, 2]]], method = "pearson")
+            row_idx <- row_idx + 1
+            rows[[row_idx]] <- list(
+              pearsonr = pearsonr,
+              pearsonr.bacon = pearsonr.bacon,
+              comparison = comparison$comparison,
+              model1 = model_parameters_[[combos[i, 1]]]$model,
+              model2 = model_parameters_[[combos[i, 2]]]$model,
+              pairwise_comparison = paste0(
+                comparison$comparison, "\n",
+                get_covariatetype(model_parameters_[[combos[i, 1]]]$model), " vs. ",
+                tolower(get_covariatetype(model_parameters_[[combos[i, 2]]]$model))),
+              cohort = cohort
+            )
+          }
+        }
+      }
+    }
+  #}
+}
+pearsonr_df <- data.table::rbindlist(rows)
+pearsonr_df$`|Pearson r|` <- abs(as.numeric(pearsonr_df$pearsonr.bacon))
+pearsonr_df$`Cohort` <- as.factor(pearsonr_df$cohort)
+pearsonr_df$`Comparison` <- factor(
+  pearsonr_df$comparison,
+  levels = unique(sapply(rows, function(x) {x$comparison})))
+pearsonr_df$`Pairwise comparison` <- factor(
+  pearsonr_df$pairwise_comparison,
+  levels = unique(sapply(rows, function(x) {x$pairwise_comparison})))
+write.csv(pearsonr_df,
+     file = file.path(readd(outdir), "fig3_data.csv"))
+```
+
+Figure \@ref(fig:betacor) shows correlation coefficients (Pearson r) for beta values of variables of interest in different comparisons. Correlation between the beta values seems to decrease with decreasing performance of metabolic predictors. This does not indicate how well the information contained in the variables of interest is reflected in the transcriptomics data, but rather that deviations between two variables are reflected in the transcriptomics data.
+For the NTR cohort, correlation coefficients are often lower compared to the other cohorts. A possible reason could be a missing metabolite which influences the metabolic score.
+
+```{r betacor, fig.cap = "Pairwise comparisons of TWAS results. Absolute Pearson correlation coefficients (Pearson r) of regression coefficients of gene-wise linear models (limma/voom) for outcome variables in alternative models per comparison and cohort. Comparisons are ordered by performance of metabolic predictors for binary outcome measures. Mean values across four cohorts (two cohorts for hsCRP) are plotted as horizontal bars (gray)."}
+require(ggplot2)
+ggp_pairwisecorr <- ggplot(pearsonr_df, aes(
+  x = `Pairwise comparison`, 
+  #x = paste(comparison,model1,model2),
+  y = `|Pearson r|`)) +
+  #xlab("Comparison") +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6, 
+               color = "#999999") +
+  # stat_summary(aes(label = round(..y.., 2)), fun = mean, geom = "text") +
+  geom_point(aes(color = `Cohort`, shape = `Cohort`), size = 0.6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  #scale_x_discrete(limits = comparison_order_by_binary_outcome_performance_z) +
+    theme_light(base_size = 6) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        plot.margin = unit(c(5.5, 5.5, 5.5, 35.5), "points"),
+        legend.position = "bottom")
+
+ggsave(file.path(readd(outdir), "fig3.pdf"), ggp_pairwisecorr, 
+       width = 12, height = 7, units = "cm", dpi = 600)
+ggp_pairwisecorr
+```
+
+### Meta analysis and replication
+
+```{r metaanalysisdata, echo = FALSE }
+loadd(loo_meta_analysis_all)
+loo_meta_analysis_all$covariate_type <- apply(loo_meta_analysis_all, 1, function(x) {
+  if (endsWith(x[["model"]], "_z")) {
+    model_base_name <- substr(x[["model"]], 1, nchar(x[["model"]])-2)
+  } else {
+    model_base_name <- x[["model"]]
+  }
+  covariate_type <- get_covariatetype(model_base_name)
+  covariate_type
+})
+# convert to long format
+loo_meta_analysis_all_long <- reshape2::melt(
+  loo_meta_analysis_all,
+  id.vars = c("meta.cohorts", "comparison", "model", "replication.cohort", "covariate_type"),
+  variable.name = "parameter",
+  value.name = "value")
+
+loo_meta_analysis_all_long$`Meta-analyzed cohorts` <- sapply(
+  loo_meta_analysis_all_long$meta.cohorts, function(x) {
+    paste0(strsplit(x, "_")[[1]], collapse = ", ")
+  }) 
+loo_meta_analysis_all_long$`Meta-analyzed cohorts\n(replication cohort)` <- paste(
+  loo_meta_analysis_all_long$`Meta-analyzed cohorts`,
+  " (", loo_meta_analysis_all_long$replication.cohort, ")", sep = "")
+loo_meta_analysis_all_long$value <- as.numeric(loo_meta_analysis_all_long$value)
+loo_meta_analysis_all_long <- na.omit(loo_meta_analysis_all_long, cols = c("value"))
+
+loo_meta_analysis_all_long$`Variable type` <- factor(loo_meta_analysis_all_long$covariate_type,
+                                              levels = c("Reported variable",
+                                                         "Metabolic surrogate",
+                                                         "Epigenetic surrogate"),
+                                              labels = c("Reported \nvariable",
+                                                         "Metabolic\nsurrogate",
+                                                         "Epigenetic\nsurrogate"))
+
+loo_meta_analysis_all_long_comparison_lables <- unique(loo_meta_analysis_all_long$comparison)
+ordered_levels <- c("eGFR", "Triglycerides", "LDL cholesterol", "Total cholesterol",
+                     "HDL cholesterol", "Diabetes", "Metabolic syndrome", "Sex (male)",                         
+                     "Lipid medication", "Blood pressure lowering medication", "(High) age",  
+                     "BMI, obesity", "Hemoglobin", "White blood cells", "Current smoking",       
+                     "Alcohol consumption")
+ordered_lables <- c("eGFR", "Triglycerides", "LDL cholesterol", "Total cholesterol",
+                     "HDL cholesterol", "Diabetes", "Metabolic syndrome", "Sex (male)",                         
+                     "Lipid medication", "Blood pressure\nlowering medication", "(High) age",  
+                     "BMI, obesity", "Hemoglobin", "White blood cells", "Current smoking",       
+                     "Alcohol consumption")
+
+stopifnot(setequal(loo_meta_analysis_all_long_comparison_lables, ordered_levels))
+
+loo_meta_analysis_all_long$Outcome <- factor(
+  loo_meta_analysis_all_long$comparison,
+  levels = ordered_levels,
+  labels = ordered_lables)
+
+write.csv(loo_meta_analysis_all_long,
+     file = file.path(readd(outdir), "fig4_data.csv"))
+
+loo_meta_analysis_all_long <- loo_meta_analysis_all_long[loo_meta_analysis_all_long$`Variable type` != "Epigenetic\nsurrogate",]
+```
+
+A decreased bias and inflation of test statistics as observed for certain models might indicate a lower number of false positive findings. However, it is also possible that the number of true positive findings is reduced. To investigate this, a leave-one-cohort-out meta analysis and replication study has been performed for all comparisons except "hscrp" (only two cohorts available) as described in @Rooij2019. 
+
+Figure \@ref(fig:metaanalyzed) shows the number of significant associations from metaanalyses of three cohorts while Figure \@ref(fig:replicated) show the corresponding percentage of associations replicated in the fourth cohort. Since the number of metaanalyzed genes and the corresponding fraction of replicated genes depends on the p-value cutoff, a threshold-free comparison is shown in Figure \@ref(fig:corrbo), where correlation coefficients between metaanalyzed and replicated associations for effect sizes and rank-biased overlaps (RBO, as implemented in Schmich F (2021). gespeR: Gene-Specific Phenotype EstimatoR. R package version 1.24.0, http://www.cbg.ethz.ch/software/gespeR. based on @Webber2010) are calculated. Higher values would indicate that results are better being replicated.
+
+While the number of significant associations found a metaanalysis (Figure \@ref(fig:metaanalyzed)) tends to be lower when using metabolic scores as primary outcome, there is no clear trend for the fraction of replicated associations (Figure \@ref(fig:replicated)). The correlation of effect sizes (Figure \@ref(fig:corrbo)) between metaanalysis and replication study is generally very low (likely because the majority of genes are not associated with the outcome). It is therefore not possible to draw a conclusion with regard to which model better replicates in another cohort. The rank-biased overlap is a measure for the similarity of two ranked lists with the option of weighting top ranks higher than lower ranks. Figure \@ref(fig:corrbo) shows that RBO scores of the -log10(adjusted p-value)-ranked gene lists highly differ between comparisons and types of outcome variables. This indicates that in the case of "totalcholesterol" and "ldlchol", results of TWAS against a metabolic score can be better replicated than of those against a measured value. The opposite can be seen for "triglycerides" and "age".
+
+
+```{r metaanalyzed, fig.cap = "Number of significant associations found in metaanalysis of three cohorts for alternative models in different comparisons. Comparisons are ordered by performance of metabolic predictors for binary outcome measures. Type of primary outcome variable are indicated by color. Mean values across four metaanalyses are plotted as horizontal bars. Note the log10 scale on the y-axis."}
+require(ggbeeswarm)
+ggp_meta1 <- ggplot(loo_meta_analysis_all_long[
+  (loo_meta_analysis_all_long$parameter %in% c("meta.analyzed")),],
+  aes(x = Outcome, y = value, color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, 
+                    shape = meta.cohorts),
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  ylab("Number of\nmeta-analyzed genes") +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  #scale_x_discrete(limits = comparison_order_by_binary_outcome_performance_z[comparison_order_by_binary_outcome_performance_z != "hscrp_z"]) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  scale_y_continuous(trans = "log10") +
+  # facet_grid(rows = vars(parameter), scales = "free_y") +
+  theme_light(base_size = 6) +
+  labs(tag = "A") +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.position = "none",
+        plot.margin= unit(c(0.2, 0.5, 0.1, 0.5), "lines") # top, right, bottom, and left margins
+        )
+  # theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+ggp_meta2 <- ggplot(loo_meta_analysis_all_long[
+  (loo_meta_analysis_all_long$parameter %in% c("percentage_replicated")),],
+  aes(x = Outcome, y = value, color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, 
+                    shape = `Meta-analyzed cohorts\n(replication cohort)`),
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  ylab("Percentage of\nreplicated genes") +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_x_discrete(limits = comparison_order_by_binary_outcome_performance_z[comparison_order_by_binary_outcome_performance_z != "hscrp_z"]) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  # facet_grid(rows = vars(parameter), scales = "free_y") +
+  theme_light(base_size = 6) +
+  labs(tag = "B") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        legend.position = "none")
+
+ggp_meta2_dummy <- ggplot(loo_meta_analysis_all_long[
+  (loo_meta_analysis_all_long$parameter %in% c("percentage_replicated")),],
+  aes(x = Outcome, y = value, color = `Variable type`)) +
+  geom_beeswarm(aes(color = `Variable type`, 
+                    shape = `Meta-analyzed cohorts\n(replication cohort)`),
+                groupOnX = TRUE, priority = "none",
+                dodge.width = 0.5, size = 0.6) +
+  stat_summary(fun = mean, geom = "point", shape = 95, cex = 6) +
+  # scale_color_brewer(palette = "Dark2") +
+  scale_colour_manual(values = cbf_palette) +
+  theme_light(base_size = 6) 
+
+ggp_meta_legend <- as_ggplot(get_legend(ggp_meta2_dummy)) +
+  theme(plot.margin = unit(c(2, 0.5, 2, 0.5), "lines"))
+
+plot_list <- list(ggp_meta1, ggp_meta2)
+grob_list <- lapply(plot_list, ggplotGrob)
+ggp_meta <- grid.arrange(
+  arrangeGrob(do.call(rbind, grob_list)),
+  ggp_meta_legend, nrow = 1, widths = c(8, 2))
+ggsave(file.path(readd(outdir), "fig4.pdf"), ggp_meta, 
+       width = 12, height = 7, units = "cm", dpi = 600)
+ggp_meta
+```
+
+```{r replicated, fig.cap = "Fraction of significant associations from metaanalysis of three cohorts replicated in a fourth cohort for alternative models in different comparisons. Comparisons are ordered by performance of metabolic predictors for binary outcome measures. Type of primary outcome variable are indicated by color. Mean values across four replication studies are plotted as horizontal bars."}
+
+```
+
+
+
+
+## References
+

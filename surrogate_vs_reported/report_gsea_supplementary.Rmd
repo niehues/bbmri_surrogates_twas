@@ -1,0 +1,199 @@
+---
+title: "S1 Appendix"
+author: 
+  - Anna Niehues^[Radboud University Medical Center, Anna.Niehues@radboudumc.nl]
+output: bookdown::html_document2
+bibliography: bibliography.bib
+---
+
+## Results of gene set enrichment analyses
+
+Gene-set enrichment analyses (GSEA) were performed using the R/Bioconductor package fgsea \cite{https://doi.org/10.1101/060012} and gene sets retrieved from the Reactome Pathway Database \cite{https://doi.org/10.1093/nar/gkz1031}. Genes were ranked by $-\log_{10}(p_{b})*|\beta_{b}|$ with $p_{b} $ = bacon-corrected p-value and $beta_{b}$ = bacon-corrected effect size. The number of permutations for initial estimation of p-values was set to \num{1e4}; the boundary for calculating p-values was set to \num{1e-50}.
+
+
+```{r include=FALSE}
+plot_pathways <- function(GSEA_by_comparison_by_cohort, 
+                          outfile = NULL,
+                          alpha = 0.05,
+                          max_pathways = FALSE) {
+  # data frame with pathways from all GSEAs, i.e. for multiple models 
+  gsea_merged <- data.table::rbindlist(
+    lapply(names(GSEA_by_comparison_by_cohort), function(x) {
+      df <- GSEA_by_comparison_by_cohort[[x]]$fgsea
+      df$model <- x
+      df}))
+  # convert pathway column to factor for ordered plots
+  require(dplyr)
+  merge_for_factor <- gsea_merged %>%
+    group_by(pathway) %>%
+    summarize(order = sum(abs(NES)*-log10(padj)))
+  gsea_merged$pathway <- factor(
+    gsea_merged$pathway, 
+    levels = merge_for_factor$pathway[
+      order(merge_for_factor$order, decreasing = FALSE)])
+  # union of significant pathways
+  pathway_signif_union <- Reduce(
+    union, 
+    lapply(GSEA_by_comparison_by_cohort, function(x) {
+      x$fgsea[x$fgsea$padj < alpha,]$pathway}))
+  #print(length(pathway_signif_union))
+  # if too many pathways, decrease alpha for plot
+  if (max_pathways) {
+    tmp_alpha <- alpha
+    while (length(pathway_signif_union) > max_pathways) {
+      tmp_alpha <- tmp_alpha / 10
+      pathway_signif_union <- Reduce(
+        union,
+        lapply(GSEA_by_comparison_by_cohort, function(x) {
+          x$fgsea[x$fgsea$padj < tmp_alpha,]$pathway}))
+    }
+  }
+  # plot pathways, normalized enrichment scores and adjusted p-values
+  require(ggplot2)
+  if (is.null(outfile)) {
+    print("No significantly enriched pathways.")
+  } else {
+    tmp <- gsea_merged[order(gsea_merged$pathway, decreasing = TRUE), ][1:20]
+    tmp$leadingEdge <- vapply(tmp$leadingEdge, paste, collapse = ", ", character(1L))
+    write.csv(tmp, file = outfile)
+  }
+  if (length(pathway_signif_union) > 0) {
+    ggplot(gsea_merged[gsea_merged$pathway %in% pathway_signif_union, ]) +
+      geom_segment(aes(y = pathway, x = NES, xend = 0, yend = pathway, )) +
+      geom_point(aes(y = pathway, x = NES, 
+                     fill = ifelse(padj < alpha, -log10(padj), NA), 
+                     size = size), shape = 21) +
+      theme(axis.text.y = element_text(size = 6)) +
+      scale_fill_viridis_c(na.value = "white") +
+      facet_grid(cols = vars(model)) 
+  }
+}
+```
+
+## eGFR
+
+```{r, fig.width = 12, fig.height = 43, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome eGFR (s_low_eGFR, metabolic surrogate).", echo=F}
+plot_pathways(readd(meta_GSEA_by_comparison_eGFR),
+              outfile = file.path(readd(outdir), "GSEA_eGFR.csv"))
+```
+
+## Triglycerides
+
+```{r, fig.width = 12, fig.height = 38, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome triglycerides (s_high_triglycerides, metabolic surrogate; triglycerides, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Triglycerides),
+              outfile = file.path(readd(outdir), "GSEA_Triglycerides.csv"))
+```
+
+## LDL cholesterol
+
+```{r, fig.width = 12, fig.height = 7, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome LDL cholesterol (s_high_ldl_chol, metabolic surrogate; ldlchol, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_LDL.cholesterol),
+              outfile = file.path(readd(outdir), "GSEA_LDL cholesterol.csv"))
+```
+
+## Total cholesterol
+
+```{r, fig.width = 12, fig.height = 35, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome total cholesterol (s_high_totchol, metabolic surrogate; totchol, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Total.cholesterol),
+              outfile = file.path(readd(outdir), "GSEA_Total cholesterol.csv"))
+```
+
+## HDL cholesterol
+
+```{r, fig.width = 12, fig.height = 38, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome HDL cholesterol (s_low_hdlchol, metabolic surrogate; hdlchol, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_HDL.cholesterol),
+              outfile = file.path(readd(outdir), "GSEA_HDL cholesterol.csv"))
+```
+
+## Diabetes
+
+```{r, fig.width = 12, fig.height = 22, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome diabetes (s_diabetes, metabolic surrogate).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Diabetes),
+              outfile = file.path(readd(outdir), "GSEA_Diabetes.csv"))
+```
+
+## Metabolic syndrome
+
+```{r, fig.width = 12, fig.height = 36, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome metabolic syndrome (s_metabolic_syndrome, metabolic surrogate).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Metabolic.syndrome),
+              outfile = file.path(readd(outdir), "GSEA_Metabolic syndrome.csv"))
+```
+
+## Sex (male)
+
+```{r, fig.width = 12, fig.height = 5}
+plot_pathways(readd(meta_GSEA_by_comparison_Sex..male_))
+```
+
+```{r, echo = FALSE, include=FALSE}
+# plot_pathways(readd(GSEA_by_comparison_by_cohort_Sex..male._NTR))
+# plot_pathways(readd(GSEA_by_comparison_by_cohort_Sex..male._LL))
+# plot_pathways(readd(GSEA_by_comparison_by_cohort_Sex..male._LLS))
+# plot_pathways(readd(GSEA_by_comparison_by_cohort_Sex..male._RS))
+```
+
+## Lipid medication
+
+```{r, fig.width = 12, fig.height = 33, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome lipid medication (s_lipidmed, metabolic surrogate; lipidmed_statins, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Lipid.medication),
+              outfile = file.path(readd(outdir), "GSEA_Lipid medication.csv"))
+```
+
+## hsCRP
+
+```{r, fig.width = 12, fig.height = 35, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome hsCRP (s_high_hscrp, metabolic surrogate; hscrp, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_hsCRP),
+              outfile = file.path(readd(outdir), "GSEA_hsCRP.csv"))
+```
+
+## Blood pressure lowering medication
+
+```{r, fig.width = 12, fig.height = 33, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome blood pressure lowering medication (s_blood_pressure_lowering_med, metabolic surrogate).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Blood.pressure.lowering.medication),
+              outfile = file.path(readd(outdir), "GSEA_Blood pressure lowering medication.csv"))
+```
+
+## Age
+
+```{r, fig.width = 12, fig.height = 29, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome age (s_high_age, metabolic surrogate; sampling_age, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_.High..age),
+              outfile = file.path(readd(outdir), "GSEA_(High) age.csv"))
+```
+
+## BMI, obesity
+
+```{r, fig.width = 12, fig.height = 31, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome BMI/obesity (s_obesity, metabolic surrogate; bmi, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_BMI..obesity),
+              outfile = file.path(readd(outdir), "GSEA_BMI, obesity.csv"))
+```
+
+
+## Hemoglobin
+
+```{r, fig.width = 12, fig.height = 57, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome hemoglobin (s_low_hgb, metabolic surrogate; hgb, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Hemoglobin),
+              outfile = file.path(readd(outdir), "GSEA_Hemoglobin.csv"))
+```
+
+## White blood cells
+
+```{r, fig.width = 12, fig.height = 37, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome white blood cells (s_low_wbc, metabolic surrogate; wbc, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_White.blood.cells),
+              outfile = file.path(readd(outdir), "GSEA_White blood cells.csv"))
+```
+
+## Current smoking 
+
+```{r, fig.width = 12, fig.height = 10, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome current smoking (s_current_smoking, metabolic surrogate; smoking_current, reported variable).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Current.smoking),
+              outfile = file.path(readd(outdir), "GSEA_Current smoking.csv"))
+
+```
+
+## Alcohol consumption 
+
+```{r, fig.width = 12, fig.height = 21, fig.cap = "GSEA results of meta-analyzed TWAS results for outcome alcohol consumption (s_alcohol_consumption, metabolic surrogate).", echo = FALSE}
+plot_pathways(readd(meta_GSEA_by_comparison_Alcohol.consumption),
+              outfile = file.path(readd(outdir), "GSEA_Alcohol consumption.csv"))
+```
+

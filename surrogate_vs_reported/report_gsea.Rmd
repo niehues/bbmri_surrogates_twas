@@ -1,0 +1,425 @@
+---
+title: "Results of Gene Set Enrichment Analysis (GSEA)"
+author: 
+  - Anna Niehues^[Radboud University Medical Center, Anna.Niehues@radboudumc.nl]
+output: bookdown::html_document2
+bibliography: bibliography.bib
+---
+
+```{r}
+library(drake)
+loadd(epismoker_variables)
+loadd(surrogates_variables)
+get_covariatetype <- function(outcome_variable) {
+  if (outcome_variable %in% epismoker_variables) {
+    covariate_type <- "Epigenetic surrogate"
+  } else if (outcome_variable %in% surrogates_variables) {
+    covariate_type <- "Metabolic surrogate"
+  } else {
+    covariate_type <- "Reported variable"
+  }
+  return(covariate_type)
+}
+```
+
+```{r gsea_data}
+require(dplyr)
+rows = list()
+row_idx = 0
+# rows_meta = list()
+# row_idx_meta = 0
+for (comparison in models_json) {
+  # if (endsWith(names(comparison$models)[[1]], "_z")) {
+    # print(comparison$comparison)
+    # GSEA of meta-analyzed TWAS
+    meta_gsea_name <- paste0("meta_GSEA_by_comparison_", comparison$comparison)
+    meta_gsea_name <- gsub("[, ()]", ".", meta_gsea_name)
+    if (endsWith(meta_gsea_name, ".")) {
+      substr(meta_gsea_name, nchar(meta_gsea_name), nchar(meta_gsea_name)) <- "_"
+    }
+    meta_gsea_results <- readd(meta_gsea_name, character_only = TRUE)
+    save(meta_gsea_results,
+         file = file.path(readd(outdir), 
+                          comparison$comparison, 
+                          paste0(meta_gsea_name, ".RData", sep = "")))
+    pathway_intersect <- Reduce(intersect, lapply(meta_gsea_results, function(x) {
+      x$fgsea[x$fgsea$padj < 0.05,]$pathway}))
+    # print(length(pathway_intersect))
+    row_idx <- row_idx + 1
+    rows[[row_idx]] <- list(
+      comparison = comparison$comparison,
+      cohort = "Meta-analysis",
+      model = "Intersection",
+      # scaling = "z",
+      covariate_type = "Intersection",
+      num_pathways = length(pathway_intersect)
+    )
+    for (model in names(meta_gsea_results)) {
+      if (endsWith(model, "_z")) {
+        model_base_name <- substr(model, 1, nchar(model)-2)
+        # scaling <- "z"
+      } else {
+        model_base_name <- model
+        # scaling <- "none"
+      }
+      covariate_type <- get_covariatetype(model_base_name)
+      if (covariate_type != "Epigenetic surrogate") {
+        row_idx <- row_idx + 1
+        rows[[row_idx]] <- list(
+          comparison = comparison$comparison,
+          cohort = "Meta-analysis",
+          model = model,
+          # scaling = scaling,
+          covariate_type = covariate_type,
+          num_pathways = length(meta_gsea_results[[model]]$fgsea[
+            meta_gsea_results[[model]]$fgsea$padj < 0.05,]$pathway)
+        )
+      }
+    }
+    # individual cohorts GSEA
+    for (cohort in comparison$cohorts) {
+      gsea_name <- paste0(
+        "GSEA_by_comparison_by_cohort_", comparison$comparison, "_", cohort)
+      gsea_name <- gsub("[, ()]", ".", gsea_name)
+      gsea_results <- readd(gsea_name, character_only = TRUE)
+      # print(cohort)
+      # lapply(gsea_results, function(x) {print(sum(x$padj < 0.05))})
+      pathway_intersect <- Reduce(intersect, lapply(gsea_results, function(x) {
+        x$fgsea[x$fgsea$padj < 0.05,]$pathway}))
+      # print(length(pathway_intersect))
+      row_idx <- row_idx + 1
+      rows[[row_idx]] <- list(
+        comparison = comparison$comparison,
+        cohort = cohort,
+        model = "Intersection",
+        # scaling = scaling,
+        covariate_type = "Intersection",
+        num_pathways = length(pathway_intersect)
+      )
+      for (model in names(gsea_results)) {
+        if (endsWith(model, "_z")) {
+          model_base_name <- substr(model, 1, nchar(model)-2)
+          # scaling <- "z"
+        } else {
+          model_base_name <- model
+          # scaling <- "none"
+        }
+        covariate_type <- get_covariatetype(model_base_name)
+        if (covariate_type != "Epigenetic surrogate") {
+          row_idx <- row_idx + 1
+          rows[[row_idx]] <- list(
+            comparison = comparison$comparison,
+            cohort = cohort,
+            model = model,
+            # scaling = scaling,
+            covariate_type = covariate_type,
+            num_pathways = length(gsea_results[[model]]$fgsea[
+              gsea_results[[model]]$fgsea$padj < 0.05,]$pathway)
+          )
+        }
+      }
+    }
+  # }
+}
+gsea_df <- data.table::rbindlist(rows)
+gsea_df_comparisonlabels <- unique(gsea_df$comparison)
+gsea_df_comparisonlabels[gsea_df_comparisonlabels == "Blood pressure lowering medication"] <- "Blood pressure\nlowering medication"
+gsea_df$Comparison <- factor(
+  gsea_df$comparison,
+  levels = unique(gsea_df$comparison),
+  labels = gsea_df_comparisonlabels)
+gsea_df$`Variable type` <- factor(gsea_df$covariate_type,
+                                  levels = c("Reported variable",
+                                             "Metabolic surrogate",
+                                             "Epigenetic surrogate",
+                                             "Intersection"),
+                                  labels = c("Reported \nvariable",
+                                             "Metabolic\nsurrogate",
+                                             "Epigenetic\nsurrogate",
+                                             "Intersection"))
+gsea_df$`Cohort` <- factor(gsea_df$cohort,
+                                  levels = c("Meta-analysis", "LL", "LLS", "NTR", "RS"),
+                                  labels = c("Meta-\nanalysis", "LL", "LLS", "NTR", "RS"))
+
+
+```
+
+
+```{r gseanumpathways, fig.cap = "Number of pathways found in in gene set enrichment analysis (adjusted p-value < 0.05)"}
+require(ggplot2)
+# http://jfly.iam.u-tokyo.ac.jp/color/
+cbf_palette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+ggp_gseapercohort <- ggplot(gsea_df) +
+  geom_bar(aes(x = `Variable type`, y = num_pathways, fill = `Variable type`), 
+           stat = "identity") +
+  facet_grid(
+    cols = vars(Comparison),
+    rows = vars(Cohort)) +
+    #switch = "x") +
+  ylab("Number of pathways") +
+  # scale_fill_brewer(palette = "Dark2") + 
+  scale_fill_manual(values = cbf_palette) +
+  theme_light(base_size = 6) +
+  theme(axis.title.x = element_blank(), 
+        axis.text.x = element_blank(), 
+        axis.ticks.x= element_blank(),
+    #axis.text.x = element_text(angle = 90, hjust = 1),
+        strip.text.x = element_text(angle = 90),
+    strip.background =element_rect(fill = "lightgray"),
+    strip.text = element_text(colour = "black")) 
+
+ggsave(file.path(readd(outdir), "fig5.pdf"), ggp_gseapercohort, 
+       width = 12, height = 7, units = "cm", dpi = 1200)
+write.csv(gsea_df,
+     file = file.path(readd(outdir), "fig5_data.csv"))
+ggp_gseapercohort
+
+```
+
+
+```{r pathwayplotfunc}
+plot_pathways <- function(GSEA_by_comparison_by_cohort, 
+                          alpha = 0.05,
+                          max_pathways = FALSE) {
+  require(fgsea)
+  lapply(GSEA_by_comparison_by_cohort, function(x) {
+    topPathwaysUp <- x$fgsea[ES > 0][head(order(pval), n=10), pathway]
+    topPathwaysDown <- x$fgsea[ES < 0][head(order(pval), n=10), pathway]
+    topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+    plot.new()
+    plotGseaTable(x$pathways[topPathways], x$ranks, x$fgsea, 
+                  gseaParam = 0.5)
+  })
+  # data frame with pathways from all GSEAs, i.e. for multiple models 
+  gsea_merged <- data.table::rbindlist(
+    lapply(names(GSEA_by_comparison_by_cohort), function(x) {
+      df <- GSEA_by_comparison_by_cohort[[x]]$fgsea
+      df$model <- x
+      df}))
+  # save(gsea_merged, file = "GSEAexample.RData")
+  # convert pathway column to factor for ordered plots
+  require(dplyr)
+  merge_for_factor <- gsea_merged %>%
+    group_by(pathway) %>%
+    summarize(order = sum(abs(NES)*-log10(padj)))
+  gsea_merged$pathway <- factor(
+    gsea_merged$pathway, 
+    levels = merge_for_factor$pathway[
+      order(merge_for_factor$order, decreasing = FALSE)])
+  # union of significant pathways
+  pathway_signif_union <- Reduce(
+    union, 
+    lapply(GSEA_by_comparison_by_cohort, function(x) {
+      x$fgsea[x$fgsea$padj < alpha,]$pathway}))
+  # if too many pathways, decrease alpha for plot
+  if (max_pathways) {
+    tmp_alpha <- alpha
+    while (length(pathway_signif_union) > max_pathways) {
+      tmp_alpha <- tmp_alpha / 10
+      pathway_signif_union <- Reduce(
+        union,
+        lapply(GSEA_by_comparison_by_cohort, function(x) {
+          x$fgsea[x$fgsea$padj < tmp_alpha,]$pathway}))
+    }
+  }
+  # plot pathways, normalized enrichment scores and adjusted p-values
+  require(ggplot2)
+  ggplot(gsea_merged[gsea_merged$pathway %in% pathway_signif_union, ]) +
+    geom_segment(aes(y = pathway, x = NES, xend = 0, yend = pathway, )) +
+    geom_point(aes(y = pathway, x = NES, 
+                   fill = ifelse(padj < alpha, -log10(padj), NA), 
+                   size = size), shape = 21) +
+    theme(axis.text.y = element_text(size = 6)) +
+    scale_fill_viridis_c(na.value="white") +
+    facet_grid(cols = vars(model)) 
+}
+```
+
+```{r}
+plot_enrichment <- function(gsea_results, pathway) {
+  require(fgsea)
+  single_plots <- lapply(gsea_results, function(x) {
+    plotEnrichment(x$pathways[[pathway]], x$ranks)})
+  cowplot::plot_grid(
+    single_plots[[1]],
+    single_plots[[2]],
+    labels = names(gsea_results)
+  )
+}
+```
+
+## eGFR
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_eGFR), max_pathways = 100)
+```
+
+## Triglycerides
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Triglycerides), max_pathways = 100)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_Triglycerides), "Translation")
+plot_enrichment(readd(meta_GSEA_by_comparison_Triglycerides), "Cap-dependent Translation Initiation")
+```
+
+## LDL cholesterol
+
+```{r, fig.width = 10, fig.height = 9}
+plot_pathways(readd(meta_GSEA_by_comparison_LDL.cholesterol))
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_LDL.cholesterol), "Cholesterol biosynthesis")
+plot_enrichment(readd(meta_GSEA_by_comparison_LDL.cholesterol), "Signal Transduction")
+```
+
+## Total cholesterol
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Total.cholesterol), max_pathways = 100)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_Total.cholesterol), "Immune System")
+plot_enrichment(readd(meta_GSEA_by_comparison_Total.cholesterol), "Innate Immune System")
+```
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(GSEA_by_comparison_by_cohort_Total.cholesterol_NTR), max_pathways = 100)
+plot_pathways(readd(GSEA_by_comparison_by_cohort_Total.cholesterol_RS), max_pathways = 100)
+```
+
+## HDL cholesterol
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_HDL.cholesterol), max_pathways = 100)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_HDL.cholesterol), "Translation")
+```
+
+## Diabetes
+
+```{r, fig.width = 10, fig.height = 19}
+plot_pathways(readd(meta_GSEA_by_comparison_Diabetes))
+```
+
+## Metabolic syndrome
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Metabolic.syndrome), max_pathways = 100)
+```
+
+## Sex (male)
+
+```{r, fig.width = 10, fig.height = 7}
+plot_pathways(readd(GSEA_by_comparison_by_cohort_Sex..male._NTR))
+```
+
+
+## Lipid medication
+
+```{r, fig.width = 10, fig.height = 7}
+plot_pathways(readd(meta_GSEA_by_comparison_Lipid.medication), max_pathways = 50)
+```
+
+## hsCRP
+
+More significantly enriched pathways for meta-analysed TWASs in case of metabolic surrogates
+
+
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_hsCRP), max_pathways = 100)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_hsCRP), "Translation")
+plot_enrichment(readd(meta_GSEA_by_comparison_hsCRP), "Metabolism")
+```
+
+## Blood pressure lowering medication
+
+```{r, fig.width = 10, fig.height = 7}
+plot_pathways(readd(meta_GSEA_by_comparison_Blood.pressure.lowering.medication), max_pathways = 50)
+```
+
+## Age
+
+```{r, fig.width = 10, fig.height = 7}
+plot_pathways(readd(meta_GSEA_by_comparison_.High..age), max_pathways = 50)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_.High..age), 
+                "Respiratory electron transport, ATP synthesis by chemiosmotic coupling, and heat production by uncoupling proteins.")
+plot_enrichment(readd(meta_GSEA_by_comparison_.High..age), "Innate Immune System")
+plot_enrichment(readd(meta_GSEA_by_comparison_.High..age), "Neutrophil degranulation")
+```
+
+```{r, fig.width = 10, fig.height = 7}
+plot_pathways(readd(GSEA_by_comparison_by_cohort_.High..age_LLS), max_pathways = 50)
+```
+
+Discussion: https://jlb.onlinelibrary.wiley.com/doi/pdf/10.1002/jlb.67.1.40 describe age-related decline of neutrophil function, adn possible association with increased susceptibility to infections
+
+
+
+
+## BMI, obesity
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_BMI..obesity), max_pathways = 100)
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_BMI..obesity), "Translation")
+plot_enrichment(readd(meta_GSEA_by_comparison_BMI..obesity), "Signal Transduction")
+plot_enrichment(readd(meta_GSEA_by_comparison_BMI..obesity), "Response of EIF2AK4 (GCN2) to amino acid deficiency")
+plot_enrichment(readd(meta_GSEA_by_comparison_BMI..obesity), "Selenoamino acid metabolism")
+plot_enrichment(readd(meta_GSEA_by_comparison_BMI..obesity), "NR1H2 and NR1H3-mediated signaling")
+```
+
+## Hemoglobin
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Hemoglobin), max_pathways = 100)
+```
+
+## White blood cells
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_White.blood.cells), max_pathways = 100)
+```
+
+## Current smoking 
+
+Epigenetic vs. metabolic score for current smoking.
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Current.smoking))
+```
+
+```{r}
+plot_enrichment(readd(meta_GSEA_by_comparison_Current.smoking), "GTP hydrolysis and joining of the 60S ribosomal subunit")
+plot_enrichment(readd(meta_GSEA_by_comparison_Current.smoking), "Translation")
+plot_enrichment(readd(meta_GSEA_by_comparison_Current.smoking), "Signal Transduction")
+```
+
+## Alcohol consumption 
+
+
+```{r, fig.width = 10, fig.height = 12}
+plot_pathways(readd(meta_GSEA_by_comparison_Alcohol.consumption), max_pathways = 100)
+```
+
+
+
+
+
+
+

@@ -1,0 +1,194 @@
+---
+title: "Overview of smoking predictors"
+author: 
+  - Anna Niehues^[Radboud University Medical Center, Anna.Niehues@radboudumc.nl]
+output: html_document
+bibliography: bibliography.bib
+---
+
+```{r}
+library(targets)
+tar_load(metadata)
+colnames(metadata)
+```
+
+
+
+## Reported values and metabolic scores
+
+```{r}
+covariates_to_compare
+```
+
+Distribution of (original) values 
+
+Note: one metabolite is missing in NTR, i.e. metabolic surrogate values should be used with caution
+
+```{r}
+residuals_qq <- function(x, y, plot_title) {
+  lm_fit <- lm(y ~ x, data = list(x = x, y = y), na.action = na.exclude)
+  qqnorm(lm_fit$residuals)
+  qqline(lm_fit$residuals)
+  title(sub = plot_title)
+}
+```
+
+
+```{r}
+require(ggplot2)
+require(ggpubr)
+
+apply(covariates_to_compare, 1, function(x) {
+  if (is.numeric(metadata[, x[["reported"]]])) {
+    # scatter plot with marginal distributions - raw values
+    ggpo <- ggplot(metadata, 
+                  aes(x = .data[[x[["reported"]]]], 
+                      y = .data[[x[["predicted"]]]], 
+                      color = biobank_id)) +
+      geom_point(size = 0.3) +
+      geom_smooth(method = "lm") +
+      stat_cor(method = "pearson") +
+      ggtitle("Original values")
+    plot(ggpo)
+    
+    residuals_qq(metadata[, x[["reported"]]],
+                 metadata[, x[["predicted"]]],
+                 "Residuals, lm, original values")
+    
+    # ln transformation
+    ggpl <- ggplot(metadata, 
+                  aes(x = log(.data[[x[["reported"]]]]+1), 
+                      y = log(.data[[x[["predicted"]]]]+1), 
+                      color = biobank_id)) +
+      geom_point(size = 0.3) +
+      geom_smooth(method = "lm") +
+      stat_cor(method = "pearson") +
+      ggtitle("ln transformation")
+    plot(ggpl)
+    
+    residuals_qq(log(metadata[, x[["reported"]]]+1),
+                 log(metadata[, x[["predicted"]]]+1),
+                 "Residuals, lm, ln-transformed values")
+    
+    # quantile normalization
+    qn <- as.data.frame(
+      preprocessCore::normalize.quantiles(as.matrix(metadata[, x])))
+    rownames(qn) <- rownames(metadata)
+    colnames(qn) <- sapply(x, function(y) {paste0(y, ".qn")})
+    df <- cbind(metadata, qn)
+    ggpq <- ggplot(df, 
+                  aes(x = .data[[paste0(x[["reported"]], ".qn")]], 
+                      y = .data[[paste0(x[["predicted"]], ".qn")]], 
+                      color = biobank_id)) +
+      geom_point(size = 0.3) +
+      geom_smooth(method = "lm") +
+      stat_cor(method = "pearson") +
+      ggtitle("quantile normalization")
+    plot(ggpq)
+    
+    residuals_qq(df[, paste0(x[["reported"]], ".qn")],
+                 df[, paste0(x[["predicted"]], ".qn")],
+                 "Residuals, lm, quantile-normalized values")
+    
+    # bestNormalize
+    bn <- lapply(x, function(y) {
+      print(y)
+      bn_ <- bestNormalize::bestNormalize(metadata[[y]], k = 10, r = 1)
+      print(bn_$chosen_transform)
+      bn_
+    })
+    names(bn) <- lapply(x, function(y) {paste0(y, ".bn")})
+    df <- cbind(metadata, as.data.frame(
+      lapply(bn, function(y) {y$x.t}) ))
+    ggpb <- ggplot(df, 
+                  aes(x = .data[[paste0(x[["reported"]], ".bn")]], 
+                      y = .data[[paste0(x[["predicted"]], ".bn")]], 
+                      color = biobank_id)) +
+      geom_point(size = 0.3) +
+      geom_smooth(method = "lm") +
+      stat_cor(method = "pearson") +
+      ggtitle("bestNormalize")
+    plot(ggpb)
+    
+    residuals_qq(df[, paste0(x[["reported"]], ".bn")],
+                 df[, paste0(x[["predicted"]], ".bn")],
+                 "Residuals, lm, bestNormalized values")
+    
+  } else {
+    # box plot for categorical variables
+    ggpobox <- ggplot(metadata, 
+                      aes(x = .data[[x[["reported"]]]], 
+                      y = .data[[x[["predicted"]]]], 
+                      color = biobank_id)) +
+      geom_boxplot() +
+      ggtitle("Original value and categories")
+    plot(ggpobox)
+  }
+  1
+})
+```
+
+
+
+
+
+## Summary - smoking
+
+```{r}
+table(metadata[, c("reported", "PredictedSmokingStatus")])
+```
+
+## Distribution of smoking scores
+
+Note: one metabolite is missing in NTR, i.e. metabolic surrogate values for this cohort may not be usable.
+
+```{r}
+require(ggplot2)
+lapply(cohorts, function(x) {
+  ggplot(metadata[metadata$biobank_id == x,]) + 
+    geom_boxplot(aes(x = smoking, y = s_current_smoking)) +
+    facet_grid(rows = vars(PredictedSmokingStatus)) + 
+    ylab("Metabolic surrogate current smoking") +
+    ggtitle(x)
+})
+ggplot(metadata) + 
+  geom_boxplot(aes(x = smoking, y = s_current_smoking, color = biobank_id)) +
+  facet_grid(rows = vars(PredictedSmokingStatus)) + 
+  ylab("Metabolic surrogate current smoking") +
+  ggtitle("All cohorts")
+ggplot(metadata) + 
+  geom_violin(aes(x = smoking, y = s_current_smoking, color = biobank_id)) +
+  facet_grid(rows = vars(PredictedSmokingStatus)) + 
+  ylab("Metabolic surrogate current smoking") +
+  ggtitle("All cohorts")
+```
+
+## Correlation between smoking scores
+
+```{r}
+plot_smoking_score_correlation <- function(metadata, cohort) {
+  corr_m <- cor(metadata[, c("smoking_age",
+                             "smokingScore", 
+                             "methylationScore",
+                             "logOdds_CS",
+                             # "logOdds_FS",
+                             # "logOdds_NS",
+                             "probs_CS",
+                             # "probs_FS",
+                             # "probs_NS",
+                             "s_current_smoking")], 
+                use = "complete.obs", method = "pearson")
+  melt_corr_m <- reshape2::melt(corr_m)
+  ggplot(melt_corr_m) +
+    geom_tile(aes(x = Var1, y = Var2, fill = value), color="white") +
+    scale_fill_gradient2(low="red", high="blue", mid="white", 
+                         midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                         name="Pearson\nCorrelation") +
+    geom_text(aes(x = Var1, y = Var2, label = round(value, 1))) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+    ggtitle(cohort)
+}
+lapply(cohorts, function(x) {
+  plot_smoking_score_correlation(metadata[metadata$biobank_id == x,], x)
+})
+```

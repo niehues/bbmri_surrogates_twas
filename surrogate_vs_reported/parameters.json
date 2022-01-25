@@ -1,0 +1,133 @@
+[
+  {
+    "comparison": "eGFR",
+    "models": {
+      "s_low_eGFR": ["s_low_eGFR_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Triglycerides",
+    "models": {
+      "triglycerides": ["triglycerides_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_high_triglycerides": ["s_high_triglycerides_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "LDL cholesterol",
+    "models": {
+      "ldlchol": ["ldlchol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_high_ldl_chol": ["s_high_ldl_chol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Total cholesterol",
+    "models": {
+      "totchol": ["totchol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_high_totchol": ["s_high_totchol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "HDL cholesterol",
+    "models": {
+      "hdlchol": ["hdlchol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_low_hdlchol": ["s_low_hdlchol_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Diabetes",
+    "models": {
+      "s_diabetes": ["s_diabetes_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Metabolic syndrome",
+    "models": {
+      "s_metabolic_syndrome": ["s_metabolic_syndrome_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Sex (male)",
+    "models": {
+      "sex_male": ["sex_male_z", "sampling_age", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_sex": ["s_sex_z", "sampling_age", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Lipid medication",
+    "models": {
+      "lipidmed_statins": ["lipidmed_statins_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_lipidmed": ["s_lipidmed_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "hsCRP",
+    "models": {
+      "hscrp": ["hscrp_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_high_hscrp": ["s_high_hscrp_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LLS"]
+  },
+  {
+    "comparison": "Blood pressure lowering medication",
+    "models": {
+      "s_blood_pressure_lowering_med": ["s_blood_pressure_lowering_med_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "(High) age",
+    "models": {
+      "sampling_age": ["sampling_age_z", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_high_age": ["s_high_age_z", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "BMI, obesity",
+    "models": {
+      "bmi": ["bmi_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_obesity": ["s_obesity_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Hemoglobin",
+    "models": {
+      "hgb": ["hgb_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_low_hgb": ["s_low_hgb_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "White blood cells",
+    "models": {
+      "wbc": ["wbc_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_low_wbc": ["s_low_wbc_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Current smoking",
+    "models": {
+      "smoking_current": ["smoking_current_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"],
+      "s_current_smoking": ["s_current_smoking_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  },
+  {
+    "comparison": "Alcohol consumption",
+    "models": {
+      "s_alcohol_consumption": ["s_alcohol_consumption_z", "sampling_age", "sex", "flowcell_num", "granulocyte_perc", "lymph_perc", "mono_perc"]
+    },
+    "cohorts": ["NTR", "LL", "LLS", "RS"]
+  }
+]

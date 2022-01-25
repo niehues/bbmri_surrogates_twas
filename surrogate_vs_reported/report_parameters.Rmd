@@ -1,0 +1,87 @@
+---
+title: "Data and model parameters"
+author: 
+  - Anna Niehues^[Radboud University Medical Center, Anna.Niehues@radboudumc.nl]
+output: bookdown::html_document2
+bibliography: bibliography.bib
+---
+
+## Data
+
+```{r cohort_information, echo = FALSE}
+#source("input.R")
+library(drake)
+cohorts <- unique(unlist(lapply(models_json, function(x) {x$cohorts})))
+names(cohorts) <- cohorts
+num_cohorts <- length(cohorts)
+cohorts_info <- paste0(cohorts, collapse = ", ")
+if (num_cohorts > 1) {s <- "s"} else {s <- ""}
+```
+
+RNA-seq data (read counts, "Freeze2_unrelated" data sets) from `r num_cohorts` Dutch biobank cohort`r s` (`r cohorts_info`) generated within the BBMRI-NL BIOS consortium were analyzed using the BBMRIomics R package [@Iterson2020].
+
+## Metabolic predictors
+
+Input files for metabolic scores [@Bizzarri2021preprint]: 
+
+`r paste0(metabolomics_surrogates_paths, collapse = ', ')`
+
+```{r}
+# metabolic predictor scores columns
+loadd(surrogates_variables)
+surrogates_variables
+```
+
+
+## Comparisons and models
+
+Multiple comparisons are performed. For each comparison, two alternative models are defined and used in linear modeling in transcriptome-wide associations studies. For the comparisons "triglycerides", "totalcholesterol", "ldlchol", "age", "hdlchol", "hscrp" and "bmi" scores of metabolic predictors as primary outcome are compared to reported or measured values.  Additional covariates are included to adjust for biological (sex, age) and technical confounders (white blood cell counts, flow cell number). All primary outcomes are standardized (z-score normalization). 
+
+
+```{r, echo = FALSE}
+get_covariatetype <- function(outcome_variable) {
+  if (outcome_variable %in% surrogates_variables) {
+    covariate_type <- "Metabolic surrogate"
+  } else {
+    covariate_type <- "Reported variable"
+  }
+  return(covariate_type)
+}
+```
+
+
+
+```{r, echo = FALSE}
+design_l <- lapply(seq_len(num_models), function(i) {
+  x <- models_list[[i]]
+  trgt_design <- paste0(c("design", x[["comparison"]], x[["model"]], x[["cohort"]]), collapse = "_")
+  trgt_design <- gsub("[, ()]", ".", trgt_design)
+  trgt_counts_filtered_normalized <- paste0(
+    c("counts_normalized", x[["comparison"]], x[["model"]], x[["cohort"]]), collapse = "_")
+  trgt_counts_filtered_normalized <- gsub("[, ()]", ".", trgt_counts_filtered_normalized)
+  counts_filtered_normalized <- readd(trgt_counts_filtered_normalized, character_only = TRUE)
+  design <- readd(trgt_design, character_only = TRUE)
+  stopifnot(dim(counts_filtered_normalized)[2] == dim(design)[1])
+  row <- list(
+    `Trait of interest` = x[["comparison"]],
+    `Trait variable name` = x[["model"]],
+    `Trait variable type` = get_covariatetype(x[["model"]]),
+    `Cohort` = x[["cohort"]],
+    `n samples` = dim(design)[1],
+    `n features` = dim(counts_filtered_normalized)[1],
+    `Model covariates` = paste0(x[["covariates"]], collapse = ", "),
+    `Linear model` = paste0("RNA-seq data ~ ", paste0(colnames(design)[2:length(colnames(design))], collapse = " + ")))
+  return(row)
+})
+# merge wide format data frame
+design_df <- data.table::rbindlist(design_l)
+write.csv(design_df, file = file.path(readd(outdir), "model_parameters.csv"))
+```
+
+```{r}
+head(design_df)
+print(file.path(readd(outdir), "model_parameters.csv"))
+```
+
+## References
+
