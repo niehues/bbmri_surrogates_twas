@@ -22,25 +22,25 @@ check_dir <- function(directory) {
 
 
 #' Load data from BBMRIomics
-#' 
+#'
 #' @param data_set_name Name of BBMRIomics data set
 load_data_set <- function(cohort) {
   require(BBMRIomics)
   message("[load data] ", cohort)
   tmpenv <- new.env()
   if (cohort == "RS") {
-    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_RS_Freeze2_unrelated, 
+    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_RS_Freeze2_unrelated,
                            envir = tmpenv)
   } else if (cohort == "LL") {
-    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_LL_Freeze2_unrelated, 
+    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_LL_Freeze2_unrelated,
                            envir = tmpenv)
   } else if (cohort == "LLS") {
-    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_LLS_Freeze2_unrelated, 
+    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_LLS_Freeze2_unrelated,
                            envir = tmpenv)
   } else if (cohort == "NTR") {
-    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_NTR_Freeze2_unrelated, 
+    BBMRIomics::bbmri.data(rnaSeqData_ReadCounts_NTR_Freeze2_unrelated,
                            envir = tmpenv)
-  }  
+  }
   counts <- tmpenv[["counts"]]
   return(counts)
 }
@@ -57,7 +57,7 @@ create_test_data <- function(){
                        feature_id = sprintf("ID%03d", 1:nrows))
   colData <- DataFrame(Treatment = rep(c("ChIP", "Input"), 3),
                        row.names = LETTERS[1:6])
-  
+
   SummarizedExperiment(assays = list(counts = counts),
                        rowRanges = rowRanges, colData = colData)
 }
@@ -83,7 +83,7 @@ read_predicted_values <- function(path_to_csv) {
   # rename factor levels for PredictedSmokingStatus
   if ("PredictedSmokingStatus" %in% colnames(df)) {
     df$PredictedSmokingStatus <- plyr::revalue(
-      df$PredictedSmokingStatus, 
+      df$PredictedSmokingStatus,
       c("Current Smoker" = "current smoker",
         "Former Smoker" = "former-smoker",
         "Never Smoker" = "non-smoker"))
@@ -93,7 +93,7 @@ read_predicted_values <- function(path_to_csv) {
 
 
 #' Combine additional metadata into single data frame
-#' 
+#'
 combine_metadata <- function(values_df_list) {
   # samples present in all additional data sets
   samples_intersect <- Reduce(
@@ -103,13 +103,13 @@ combine_metadata <- function(values_df_list) {
   # check that rownames are the same
   stopifnot(rownames(values_df_list[[1]]) == rownames(values_df_list[[2]]))
   # merge
-  combined_df <- do.call(cbind, values_df_list) 
+  combined_df <- do.call(cbind, values_df_list)
   return(combined_df)
 }
 
 
 #' Ordered quantile normalization of features
-#' 
+#'
 #' @param col_data Data frame with features
 normalize_covariates <- function(col_data) {
   require(bestNormalize)
@@ -185,18 +185,18 @@ filter_rna <- function(counts, variables) {
   # Filtering: drop samples that have many missing features (>10%)
   # ------------------------------------
   message("[filter] samples with missing features")
-  min_features <- 0.1 * dim(counts)[1] 
+  min_features <- 0.1 * dim(counts)[1]
   samples2keep <- colSums(is.na(assays(counts)$data)) <= min_features
   counts <- counts[, samples2keep]
   message("Dropped ", table(samples2keep)["FALSE"],
           " samples with >10% missing features, ", table(samples2keep)["TRUE"],
           " samples remaining.")
   # ------------------------------------
-  # Filtering: drop lowly expressed genes 
+  # Filtering: drop lowly expressed genes
   # ------------------------------------
-  min_count <- 1 
+  min_count <- 1
   min_samples <- 0.1 * sum(samples2keep)
-  features2keep <- rowSums(assays(counts)$data > min_count) > min_samples 
+  features2keep <- rowSums(assays(counts)$data > min_count) > min_samples
   counts <- counts[features2keep,]
   message("Dropped ", table(features2keep)["FALSE"],
           " features with in count<", min_count, " in >10% of samples, ",
@@ -205,7 +205,7 @@ filter_rna <- function(counts, variables) {
 }
 
 
-load_and_prepare <- function(cohort, 
+load_and_prepare <- function(cohort,
                              predicted_values,
                              nonBIOS_test = FALSE) {
   require(SummarizedExperiment)
@@ -215,14 +215,14 @@ load_and_prepare <- function(cohort,
     counts <- create_test_data()
   }
   # make subset - remove samples with predicted values which not present in the omics data
-  samples_not_predicted <- setdiff(rownames(colData(counts)), 
+  samples_not_predicted <- setdiff(rownames(colData(counts)),
                                    rownames(predicted_values))
   tmp <- predicted_values[samples_not_predicted,]
   rownames(tmp) <- samples_not_predicted
-  predicted_values <- rbind(predicted_values, tmp) 
-  
+  predicted_values <- rbind(predicted_values, tmp)
+
   # add predicted feature values to counts data
-  colData(counts) <- cbind(colData(counts), 
+  colData(counts) <- cbind(colData(counts),
                            predicted_values[rownames(colData(counts)),])
   # numeric smoking variable
   colData(counts)$smoking_current <- NA
@@ -299,7 +299,7 @@ create_design <- function(se, covariates) {
 
 
 #' Normalize RNA-seq data (CPM)
-#' 
+#'
 #' @param counts_se A summarizedExperiment object with read counts as log counts-per-million
 #' @param design Model design matrix
 normalize_rnaseq_data <- function(counts_se, design, plot_dir, tag) {
@@ -324,13 +324,13 @@ normalize_rnaseq_data <- function(counts_se, design, plot_dir, tag) {
   dev.off()
   return(data_voom)
   # save mean-variance trand - voom plot
-  # gg_v <- ggplot(data.frame(x = data_voom$voom.xy$x, 
+  # gg_v <- ggplot(data.frame(x = data_voom$voom.xy$x,
   #                           y = data_voom$voom.xy$y,
-  #                           linex = data_voom$voom.line$x, 
+  #                           linex = data_voom$voom.line$x,
   #                           liney = data_voom$voom.line$y)) +
   #   geom_point(aes(x = x, y = y), size = 0.5) +
   #   geom_path(aes(x = linex, y = liney), color = "red")
-  
+
   # ggsave(file.path(plot_dir, paste0(tag, "_voom_mean-var.png")), gg_v)
   # assumes normal distribution of logCPM values (may not be the case, see above)
 }
@@ -367,8 +367,8 @@ run_twas <- function(data_voom, design) {
   message("[TWAS] bacon")
   results <- bacon_adjusted_TWAS(results)
   # adjust p-values for multiple testing
-  results$padj <- p.adjust(results$pval, method = "bonf")
-  results$padj.bacon <- p.adjust(results$pval.bacon, method = "bonf")
+  results$padj <- p.adjust(results$pval, method = "fdr")
+  results$padj.bacon <- p.adjust(results$pval.bacon, method = "fdr")
   # rank genes
   message("[rank genes]")
   results$ranking <- -log10(results$padj) * sign(results$eff.size)
@@ -393,31 +393,31 @@ get_signif_genes <- function(se, alpha){
 #' Perform correlation analysis of regression coefficients
 #' #standardized coefficients (beta coeeficients)
 #' Two or more models
-#' 
+#'
 correlation_analysis <- function(betas, model_parameters, cohort, outdir) {
   require(reshape2)
   require(ggplot2)
   require(gtools)
-  plot_cor <- function(model1_idx, model2_idx, betas, 
+  plot_cor <- function(model1_idx, model2_idx, betas,
                        model1, model2, cohort, outdir) {
     cor_m <- cor(betas[[model1_idx]], betas[[model2_idx]], method = "pearson")
     cor_m <- melt(cor_m)
     gg_p <- ggplot(data = cor_m) +
       geom_tile(aes(x = Var1, y = Var2, fill = value), color = "white") +
       scale_fill_gradient2(
-        low = "red", high = "blue", mid = "white", 
-        midpoint = 0, limit = c(-1,1), space = "Lab", 
+        low = "red", high = "blue", mid = "white",
+        midpoint = 0, limit = c(-1,1), space = "Lab",
         name="Pearson\nCorrelation") +
       theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
       ggtitle(paste0("Correlation of regression coefficients, ", cohort)) +
       xlab(model1) +
       ylab(model2)
-    ggsave(file.path(outdir, 
-                     paste0("beta_cor_", cohort, "_", 
+    ggsave(file.path(outdir,
+                     paste0("beta_cor_", cohort, "_",
                             model1, "_", model2, ".png")), gg_p)
     return(gg_p)
   }
-  plot_coef <- function(model1_idx, model2_idx, betas, covar_num, 
+  plot_coef <- function(model1_idx, model2_idx, betas, covar_num,
                         model1, model2, cohort, outdir) {
     df <- as.data.frame(cbind(betas[[model1_idx]][, covar_num],
                               betas[[model2_idx]][, covar_num]))
@@ -428,10 +428,10 @@ correlation_analysis <- function(betas, model_parameters, cohort, outdir) {
       geom_point() +
       geom_smooth(method = lm) +
       ggtitle(paste0("Regression coefficients, ", cohort)) +
-      xlab(paste0(c(model1, labels[[1]]), collapse = ", ")) + 
-      ylab(paste0(c(model2, labels[[2]]), collapse = ", ")) 
-    ggsave(file.path(outdir, 
-                     paste0("beta_coef_", cohort, "_", 
+      xlab(paste0(c(model1, labels[[1]]), collapse = ", ")) +
+      ylab(paste0(c(model2, labels[[2]]), collapse = ", "))
+    ggsave(file.path(outdir,
+                     paste0("beta_coef_", cohort, "_",
                             model1, "_", model2, ".png")), gg_p)
     return(gg_p)
   }
@@ -444,19 +444,19 @@ correlation_analysis <- function(betas, model_parameters, cohort, outdir) {
     for (i in seq(1, dim(combos)[1])) {
       model1_idx <- combos[i,1]
       model2_idx <- combos[i,2]
-      model1 <- model_names[[model1_idx]] 
-      model2 <- model_names[[model2_idx]] 
+      model1 <- model_names[[model1_idx]]
+      model2 <- model_names[[model2_idx]]
       my_plots <- c(
-        my_plots, 
+        my_plots,
         setNames(list(
-          plot_cor(model1_idx, model2_idx, betas, 
-                   model1, model2, cohort, outdir)), 
+          plot_cor(model1_idx, model2_idx, betas,
+                   model1, model2, cohort, outdir)),
           c(paste0(c("cor", model1, model2), collapse = "_"))))
       covar_num <- 2
       my_plots <- c(
         my_plots,
         setNames(list(
-          plot_coef(model1_idx, model2_idx, betas, covar_num, 
+          plot_coef(model1_idx, model2_idx, betas, covar_num,
                     model1, model2, cohort, outdir)),
           c(paste0(c("coef", covar_num, model1, model2), collapse = "_"))))
     }
@@ -466,13 +466,13 @@ correlation_analysis <- function(betas, model_parameters, cohort, outdir) {
 
 
 #' Bias and inflation of test statistics
-#' 
-#' van Iterson, M., van Zwet, E.W., the BIOS Consortium. et al. 
-#' Controlling bias and inflation in epigenome- and transcriptome-wide 
-#' association studies using the empirical null distribution. 
+#'
+#' van Iterson, M., van Zwet, E.W., the BIOS Consortium. et al.
+#' Controlling bias and inflation in epigenome- and transcriptome-wide
+#' association studies using the empirical null distribution.
 #' Genome Biol 18, 19 (2017). https://doi.org/10.1186/s13059-016-1131-9
-#' 
-#' 
+#'
+#'
 bacon_adjusted_TWAS <- function(TWASresults) {
   require(bacon)
   bc <- bacon(teststatistics = NULL,
@@ -485,20 +485,20 @@ bacon_adjusted_TWAS <- function(TWASresults) {
 }
 
 calc_bias_inflation <- function(TWAS, comparison, cohort, model, alpha) {
-  require(bacon) 
+  require(bacon)
   bc <- bacon(teststatistics = NULL,
               effectsizes = TWAS$results$eff.size,
               standarderrors = TWAS$results$std.err)
-  
+
   results <- list(
-    bias = bacon::bias(bc), 
-    inflation = bacon::inflation(bc), 
+    bias = bacon::bias(bc),
+    inflation = bacon::inflation(bc),
     num_significant = sum(TWAS$results$padj < alpha),
     num_significant.bacon = sum(TWAS$results$padj.bacon < alpha),
     mean_abseffsize = mean(abs(TWAS$results$eff.size)),
     mean_abseffsize.bacon = mean(abs(TWAS$results$eff.size.bacon)),
     comparison = comparison,
-    cohort = cohort, 
+    cohort = cohort,
     model = model)
   return(results)
 }
@@ -558,7 +558,7 @@ meta_analysis <- function(results){
 
 #' Perform meta analysis
 #' Leave-one-cohort-out method as described in Rooij et al. 2019, genome biology, 20: 235
-loo_analysis <- function(twas_results, 
+loo_analysis <- function(twas_results,
                          comparison_name,
                          model_name,
                          alpha = 0.05,
@@ -571,7 +571,7 @@ loo_analysis <- function(twas_results,
     idx <- 0
     # intersection of transcripts found in all cohorts
     transcript_intersect <- Reduce(
-      intersect, 
+      intersect,
       lapply(twas_results, function(twas) {rownames(twas)}))
     twas_results <- lapply(twas_results, function(twas) {twas[transcript_intersect,]})
     pdf(file = file.path(outdir, paste0("bacon_metaanalysis_", model_name, ".pdf")))
@@ -592,14 +592,14 @@ loo_analysis <- function(twas_results,
       metaanalyzed <- length(meta_results_signif)
       replicated <- length(replicated)
       rankscore.cor <- cor(
-        -log10(meta_results$padj.meta)*sign(meta_results$eff.size.meta), 
+        -log10(meta_results$padj.meta)*sign(meta_results$eff.size.meta),
         -log10(twas_results[[replication_cohort]]$padj.bacon
-               )*sign(twas_results[[replication_cohort]]$eff.size.bacon), 
+               )*sign(twas_results[[replication_cohort]]$eff.size.bacon),
                       method = "pearson")
-      eff.size.cor <-cor(meta_results$eff.size.meta, 
-                     twas_results[[replication_cohort]]$eff.size.bacon, 
+      eff.size.cor <-cor(meta_results$eff.size.meta,
+                     twas_results[[replication_cohort]]$eff.size.bacon,
                      method = "pearson")
-      
+
       idx <- idx + 1
       results[[idx]] <- as.data.frame(list(
         meta.cohorts = paste(unlist(meta_cohorts), collapse = "_"),
@@ -607,7 +607,7 @@ loo_analysis <- function(twas_results,
         replicated = replicated,
         eff.size.cor = eff.size.cor,
         rankscore.cor = rankscore.cor,
-        
+
         comparison = comparison_name,
         model = as.character(model_name),
         replication.cohort = replication_cohort))
@@ -620,8 +620,8 @@ loo_analysis <- function(twas_results,
 
 
 #' Volcano plot
-#' 
-#' 
+#'
+#'
 plot_volcano <- function(TWAS, plot_title, plot_dir) {
   require(ggplot2)
   require(ggrepel)
@@ -634,9 +634,9 @@ plot_volcano <- function(TWAS, plot_title, plot_dir) {
                      ] <- TWAS$results$SYMBOL[rownames(TWAS$results) %in% top_genes]
   # volcano plot
   thresholds = c(0.05, 0.01)
-  ggp <- ggplot() + 
+  ggp <- ggplot() +
     geom_point(
-      aes(x = eff.size.bacon, y = -log10(padj.bacon), 
+      aes(x = eff.size.bacon, y = -log10(padj.bacon),
           col = abs(-log10(padj.bacon)*eff.size.bacon)),
       data = TWAS$results) +
     scale_colour_viridis_c(direction = -1) +
@@ -646,13 +646,13 @@ plot_volcano <- function(TWAS, plot_title, plot_dir) {
       yintercept = sapply(thresholds, function(x) -log10(x)))) +
     labs(lty = "threshold") +
     geom_text_repel(
-      aes(x = eff.size.bacon, y = -log10(padj.bacon), 
+      aes(x = eff.size.bacon, y = -log10(padj.bacon),
           col = abs(-log10(padj.bacon)*eff.size.bacon), label = label),
       data = TWAS$results) +
     ggtitle(plot_title)
   # save plot
   ggsave(file.path(
-    plot_dir, 
+    plot_dir,
     paste0("TWAS_volcanoplot_", gsub("[,. ]+", "_", plot_title), ".png")), ggp)
   return(ggp)
 }
@@ -662,8 +662,8 @@ add_gene_symbols <- function(TWASresults) {
   # add gene IDs
   message("[adding symbols]")
   library(org.Hs.eg.db)
-  
-  symbol <- select(org.Hs.eg.db, keys = rownames(TWASresults), 
+
+  symbol <- select(org.Hs.eg.db, keys = rownames(TWASresults),
                    keytype = "ENSEMBL", # The ensembl ID as indicated by ensembl
                    columns = c("SYMBOL", # The official gene symbol
                                "ENTREZID" # Entrez gene Identifiers
@@ -696,7 +696,7 @@ perform_gsea <- function(TWASresults, metaanalysis = FALSE){
   # some -log10 pvalues are Inf which causes error in fgsea; use max. rank value +1 instead
   TWASresults$rankstats[is.infinite(TWASresults$rankstats)] <- max(
     TWASresults$rankstats[is.finite(TWASresults$rankstats)]) + 1
-  # filter genes by presence of ENTREZID  
+  # filter genes by presence of ENTREZID
   genes <- !is.na(TWASresults$ENTREZID) & !is.na(TWASresults$rankstats)
   # rank stats
   ranks <- TWASresults[genes, ]$rankstats
@@ -725,7 +725,7 @@ perform_gsea <- function(TWASresults, metaanalysis = FALSE){
 }
 
 
-write_parameters_table <- function(models_list, 
+write_parameters_table <- function(models_list,
                                    epismoker_variables,
                                    surrogates_variables,
                                    outfile) {
